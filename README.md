@@ -77,5 +77,11 @@ Implement API endpoints (views and URLs).
 Add filtering and permissions.
 Write tests and deploy to a hosting platform.
 
+## Current Progress
+- Project setup with Django, DRF, JWT, and PostgreSQL.
+- Models defined for `Movie`, `Genre`, `Review`, `Rating`, and `MovieGenre`.
+- Serializers implemented with TextBlob for sentiment analysis.
+- Viewsets created for all API endpoints with permissions and filtering.
+
 License
 MIT License
