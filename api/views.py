@@ -1,11 +1,15 @@
 from django.shortcuts import render
-from rest_framework import viewsets, permissions
-from rest_framework.decorators import action
+from rest_framework import viewsets, permissions, generics, status
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
+from rest_framework.serializers import Serializer
+from rest_framework_simplejwt.tokens import RefreshToken
 from django_filters.rest_framework import DjangoFilterBackend
+from django.contrib.auth.models import User
+from django.db.models import Avg
 from api.models import Movie, Genre, Review, Rating
 from api.serializers import MovieSerializer, GenreSerializer, ReviewSerializer, RatingSerializer
-from django.db.models import Avg
+from rest_framework import serializers
 
 class IsOwnerOrAdmin(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
@@ -67,9 +71,41 @@ class RatingViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-    @action(detail=False, methods=['get'], url_path='movie/(?P<movie_id>\\d+)/ratings')
-
+    @action(detail=False, methods=['get'], url_path=r'movie/(?P<movie_id>\d+)/ratings')
     def movie_ratings(self, request, movie_id=None):
         ratings = Rating.objects.filter(movie_id=movie_id)
         serializer = self.get_serializer(ratings, many=True)
         return Response(serializer.data)
+
+class RegisterSerializer(Serializer):
+    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password']
+        )
+        return user
+
+class RegisterView(generics.CreateAPIView):
+    serializer_class = RegisterSerializer
+    permission_classes = [permissions.AllowAny]  # Allow unauthenticated access
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        }, status=status.HTTP_201_CREATED)
+
+@api_view(['GET'])
+def welcome_view(request):
+    return Response({
+        'message': 'Welcome to the Movie Review & Rating API! Access endpoints at /api/ or authenticate at /api/auth/.'
+    })
