@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from textblob import TextBlob
 from enum import Enum
 
 class Sentiment(Enum):
@@ -38,8 +39,20 @@ class Review(models.Model):
     movie = models.ForeignKey(Movie, on_delete=models.CASCADE, related_name='reviews')
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     review_text = models.TextField()
-    sentiment = models.CharField(max_length=10, choices=[(s.value, s.value) for s in Sentiment])
+    sentiment = models.CharField(max_length=10, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if self.review_text:
+            blob = TextBlob(self.review_text)
+            polarity = blob.sentiment.polarity
+            if polarity > 0:
+                self.sentiment = 'Positive'
+            elif polarity < 0:
+                self.sentiment = 'Negative'
+            else:
+                self.sentiment = 'Neutral'
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.user.username} - {self.movie.title}"

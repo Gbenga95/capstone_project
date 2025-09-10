@@ -1,22 +1,21 @@
 from django.shortcuts import render
-from rest_framework import viewsets, permissions, generics, status
+from django.http import JsonResponse  # Added for welcome_view
+from rest_framework import viewsets, permissions, generics, status, serializers
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
-from rest_framework.serializers import Serializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django_filters.rest_framework import DjangoFilterBackend
 from django.contrib.auth.models import User
 from django.db.models import Avg
-from api.models import Movie, Genre, Review, Rating
-from api.serializers import MovieSerializer, GenreSerializer, ReviewSerializer, RatingSerializer
-from rest_framework import serializers
+from .models import Movie, Genre, Review, Rating
+from .serializers import MovieSerializer, GenreSerializer, ReviewSerializer, RatingSerializer
 
 class IsOwnerOrAdmin(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         return obj.user == request.user or request.user.is_staff
 
 class MovieViewSet(viewsets.ModelViewSet):
-    queryset = Movie.objects.all()
+    queryset = Movie.objects.all().order_by('id')
     serializer_class = MovieSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
@@ -25,18 +24,12 @@ class MovieViewSet(viewsets.ModelViewSet):
             return [permissions.IsAdminUser()]
         return super().get_permissions()
 
-    @action(detail=True, methods=['get'])
-    def genres(self, request, pk=None):
-        movie = self.get_object()
-        genres = movie.genres.all()
-        serializer = GenreSerializer(genres, many=True)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=['get'], url_path='average-rating')
     def average_rating(self, request, pk=None):
         movie = self.get_object()
-        avg = movie.ratings.aggregate(Avg('stars'))['stars__avg'] or 0
-        return Response({'average_rating': round(avg, 2) if avg else 0})
+        ratings = Rating.objects.filter(movie=movie)
+        avg_rating = ratings.aggregate(Avg('stars'))['stars__avg'] or 0.0
+        return Response({'average_rating': avg_rating}, status=status.HTTP_200_OK)
 
 class GenreViewSet(viewsets.ModelViewSet):
     queryset = Genre.objects.all()
@@ -49,7 +42,7 @@ class GenreViewSet(viewsets.ModelViewSet):
         return super().get_permissions()
 
 class ReviewViewSet(viewsets.ModelViewSet):
-    queryset = Review.objects.all()
+    queryset = Review.objects.all().order_by('id')
     serializer_class = ReviewSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     filter_backends = [DjangoFilterBackend]
@@ -64,7 +57,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 class RatingViewSet(viewsets.ModelViewSet):
-    queryset = Rating.objects.all()
+    queryset = Rating.objects.all().order_by('id')
     serializer_class = RatingSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
@@ -77,7 +70,7 @@ class RatingViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(ratings, many=True)
         return Response(serializer.data)
 
-class RegisterSerializer(Serializer):
+class RegisterSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
@@ -92,7 +85,7 @@ class RegisterSerializer(Serializer):
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
-    permission_classes = [permissions.AllowAny]  # Allow unauthenticated access
+    permission_classes = [permissions.AllowAny]
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -106,6 +99,6 @@ class RegisterView(generics.CreateAPIView):
 
 @api_view(['GET'])
 def welcome_view(request):
-    return Response({
+    return JsonResponse({
         'message': 'Welcome to the Movie Review & Rating API! Access endpoints at /api/ or authenticate at /api/auth/.'
     })
